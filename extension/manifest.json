@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "FB Birthday Extractor",
+  "version": "0.1.0",
+  "description": "Extract your Facebook friends' birthdays across all months and export to CSV.",
+  "permissions": ["storage", "downloads", "scripting"],
+  "host_permissions": ["https://www.facebook.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.facebook.com/*"],
+      "js": ["network-interceptor.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.facebook.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

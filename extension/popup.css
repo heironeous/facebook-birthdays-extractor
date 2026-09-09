@@ -1,0 +1,44 @@
+body {
+  width: 320px;
+  font-family: system-ui, sans-serif;
+  padding: 10px;
+}
+
+h1 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+button {
+  flex: 1;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+#status {
+  font-size: 12px;
+  margin-bottom: 6px;
+  font-weight: bold;
+}
+
+#log {
+  height: 160px;
+  overflow-y: auto;
+  background: #111;
+  color: #0f0;
+  font-size: 11px;
+  padding: 6px;
+  margin: 0;
+  white-space: pre-wrap;
+}
