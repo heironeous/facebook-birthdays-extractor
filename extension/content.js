@@ -217,7 +217,76 @@ function toCsv(rows) {
   return lines.join('\r\n');
 }
 
-async function runExtraction() {
+// ICS (RFC 5545) export — a separate, additive path alongside the CSV
+// exporter above. Unlike the CSV format, VEVENT natively supports
+// recurrence, so "repeat forever" becomes a real RRULE:FREQ=YEARLY
+// instead of a note in the description.
+function pad2Ics(n) {
+  return String(n).padStart(2, '0');
+}
+
+// All-day events use VALUE=DATE with DTEND set to the day after DTSTART
+// (RFC 5545: DTEND is exclusive for date values).
+function icsDateAndNextDay(month, day, year) {
+  const start = new Date(year, month - 1, day);
+  const end = new Date(year, month - 1, day + 1);
+  const fmt = (d) => `${d.getFullYear()}${pad2Ics(d.getMonth() + 1)}${pad2Ics(d.getDate())}`;
+  return { dtstart: fmt(start), dtend: fmt(end) };
+}
+
+// Escapes text per RFC 5545 3.3.11 (comma, semicolon, backslash, newline).
+function icsEscape(text) {
+  return String(text)
+    .replace(/\\/g, '\\\\')
+    .replace(/;/g, '\\;')
+    .replace(/,/g, '\\,')
+    .replace(/\n/g, '\\n');
+}
+
+// Lines over 75 octets must be folded with CRLF + a leading space.
+function icsFold(line) {
+  if (line.length <= 75) return line;
+  const parts = [];
+  let rest = line;
+  while (rest.length > 75) {
+    parts.push(rest.slice(0, 75));
+    rest = ' ' + rest.slice(75);
+  }
+  parts.push(rest);
+  return parts.join('\r\n');
+}
+
+function icsUid(name, month, day, year) {
+  const key = `${name}-${month}-${day}-${year ?? 'unknown'}`.replace(/[^a-zA-Z0-9-]/g, '_');
+  return `${key}@fbbday-extractor`;
+}
+
+function toIcs(rows) {
+  const now = new Date();
+  const dtstamp = `${now.getUTCFullYear()}${pad2Ics(now.getUTCMonth() + 1)}${pad2Ics(now.getUTCDate())}T${pad2Ics(now.getUTCHours())}${pad2Ics(now.getUTCMinutes())}${pad2Ics(now.getUTCSeconds())}Z`;
+
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//fbbday-extractor//EN', 'CALSCALE:GREGORIAN'];
+
+  for (const { name, month, day, year } of rows) {
+    const yearForDate = year || Number(birthdayMMDDYYYY(month, day, year).slice(6));
+    const { dtstart, dtend } = icsDateAndNextDay(month, day, yearForDate);
+    lines.push('BEGIN:VEVENT');
+    lines.push(`UID:${icsUid(name, month, day, year)}`);
+    lines.push(`DTSTAMP:${dtstamp}`);
+    lines.push(`DTSTART;VALUE=DATE:${dtstart}`);
+    lines.push(`DTEND;VALUE=DATE:${dtend}`);
+    lines.push(icsFold(`SUMMARY:${icsEscape(`${name}'s Birthday`)}`));
+    if (settings.repeatForever) {
+      lines.push('RRULE:FREQ=YEARLY');
+    }
+    lines.push('END:VEVENT');
+  }
+
+  lines.push('END:VCALENDAR');
+  return lines.join('\r\n');
+}
+
+async function runExtraction(format) {
   if (running) return;
   running = true;
   collected = new Map();
@@ -235,14 +304,22 @@ async function runExtraction() {
     const rows = Array.from(collected.values());
     await log(`Extraction complete: ${rows.length} unique birthdays.`);
 
-    const csv = toCsv(rows);
+    const dateStamp = new Date().toISOString().slice(0, 10);
     await chrome.storage.local.set({ fbbday_running: false });
-    chrome.runtime.sendMessage({
-      type: 'DOWNLOAD_CSV',
-      csv,
-      filename: `fb-birthdays-${new Date().toISOString().slice(0, 10)}.csv`,
-    }).catch(() => {});
-    chrome.runtime.sendMessage({ type: 'DONE', count: rows.length }).catch(() => {});
+    if (format === 'ics') {
+      chrome.runtime.sendMessage({
+        type: 'DOWNLOAD_ICS',
+        ics: toIcs(rows),
+        filename: `fb-birthdays-${dateStamp}.ics`,
+      }).catch(() => {});
+    } else {
+      chrome.runtime.sendMessage({
+        type: 'DOWNLOAD_CSV',
+        csv: toCsv(rows),
+        filename: `fb-birthdays-${dateStamp}.csv`,
+      }).catch(() => {});
+    }
+    chrome.runtime.sendMessage({ type: 'DONE', count: rows.length, format: format || 'csv' }).catch(() => {});
   } catch (e) {
     await log('ERROR: ' + e.message);
     await chrome.storage.local.set({ fbbday_running: false });
@@ -254,6 +331,6 @@ async function runExtraction() {
 
 chrome.runtime.onMessage.addListener((msg) => {
   if (msg && msg.type === 'START') {
-    runExtraction();
+    runExtraction(msg.format);
   }
 });
