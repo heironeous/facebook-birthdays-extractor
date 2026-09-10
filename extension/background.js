@@ -29,15 +29,27 @@ const TAB_LOAD_TIMEOUT_MS = 30000;
 const PROGRESS_WINDOW_WIDTH = 380;
 const PROGRESS_WINDOW_HEIGHT = 392;
 
-let progressWindowId = null;
+// Kept in chrome.storage.local, not just a module variable — the MV3
+// service worker gets evicted after ~30s idle, which would wipe a
+// plain in-memory id and make every click after that open a new window
+// instead of focusing the existing one.
+async function getProgressWindowId() {
+  const { fbbday_progress_window_id } = await chrome.storage.local.get('fbbday_progress_window_id');
+  return typeof fbbday_progress_window_id === 'number' ? fbbday_progress_window_id : null;
+}
+
+async function setProgressWindowId(id) {
+  await chrome.storage.local.set({ fbbday_progress_window_id: id });
+}
 
 async function openProgressWindow() {
-  if (progressWindowId !== null) {
+  const existingId = await getProgressWindowId();
+  if (existingId !== null) {
     try {
-      await chrome.windows.update(progressWindowId, { focused: true });
+      await chrome.windows.update(existingId, { focused: true });
       return;
     } catch {
-      progressWindowId = null; // window was closed by the user; recreate below
+      // window was closed by the user; fall through and recreate below
     }
   }
   const win = await chrome.windows.create({
@@ -47,11 +59,13 @@ async function openProgressWindow() {
     height: PROGRESS_WINDOW_HEIGHT,
     focused: true,
   });
-  progressWindowId = win.id;
+  await setProgressWindowId(win.id);
 }
 
-chrome.windows.onRemoved.addListener((id) => {
-  if (id === progressWindowId) progressWindowId = null;
+chrome.windows.onRemoved.addListener(async (id) => {
+  if (id === (await getProgressWindowId())) {
+    await chrome.storage.local.set({ fbbday_progress_window_id: null });
+  }
 });
 
 chrome.action.onClicked.addListener(() => {
@@ -129,8 +143,9 @@ async function handleOpenAndStart() {
   try {
     const tabId = await getOrOpenBirthdaysTab();
 
-    if (progressWindowId !== null) {
-      chrome.windows.update(progressWindowId, { focused: true }).catch(() => {});
+    const existingId = await getProgressWindowId();
+    if (existingId !== null) {
+      chrome.windows.update(existingId, { focused: true }).catch(() => {});
     }
 
     await logProgress('Tab loaded, starting extraction...');
