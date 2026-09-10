@@ -1,4 +1,5 @@
 const extractBtn = document.getElementById('extractBtn');
+const extractIcsBtn = document.getElementById('extractIcsBtn');
 const stopBtn = document.getElementById('stopBtn');
 const settingsBtn = document.getElementById('settingsBtn');
 const settingsPanel = document.getElementById('settingsPanel');
@@ -62,6 +63,7 @@ function appendLog(line) {
 
 function setRunning(running) {
   extractBtn.disabled = running;
+  extractIcsBtn.disabled = running;
   stopBtn.disabled = !running;
   statusEl.textContent = running ? 'Running...' : 'Idle.';
 }
@@ -78,7 +80,7 @@ async function resyncFromStorage() {
   setRunning(!!fbbday_running);
 }
 
-extractBtn.addEventListener('click', async () => {
+async function startExtraction(format) {
   logEl.textContent = '';
   await chrome.storage.local.set({ fbbday_stop: false, fbbday_log: [], fbbday_running: true });
   setRunning(true);
@@ -87,11 +89,14 @@ extractBtn.addEventListener('click', async () => {
   // doesn't work — Chrome tears down the popup's JS context the instant
   // the newly-created tab steals focus, killing everything after
   // chrome.tabs.create() before it can run.
-  chrome.runtime.sendMessage({ type: 'OPEN_AND_START' }).catch((e) => {
+  chrome.runtime.sendMessage({ type: 'OPEN_AND_START', format }).catch((e) => {
     appendLog('ERROR: ' + e.message);
     setRunning(false);
   });
-});
+}
+
+extractBtn.addEventListener('click', () => startExtraction('csv'));
+extractIcsBtn.addEventListener('click', () => startExtraction('ics'));
 
 stopBtn.addEventListener('click', async () => {
   await chrome.storage.local.set({ fbbday_stop: true });
@@ -103,7 +108,8 @@ chrome.runtime.onMessage.addListener((msg) => {
   if (msg.type === 'PROGRESS') {
     appendLog(msg.text);
   } else if (msg.type === 'DONE') {
-    appendLog(`Done. ${msg.count} birthdays extracted. CSV downloaded.`);
+    const fileType = msg.format === 'ics' ? 'ICS' : 'CSV';
+    appendLog(`Done. ${msg.count} birthdays extracted. ${fileType} downloaded.`);
     setRunning(false);
   } else if (msg.type === 'ERROR') {
     appendLog('ERROR: ' + msg.text);

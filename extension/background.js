@@ -139,7 +139,7 @@ async function getOrOpenBirthdaysTab() {
   return waitForTabLoad(tab.id);
 }
 
-async function handleOpenAndStart() {
+async function handleOpenAndStart(format) {
   try {
     const tabId = await getOrOpenBirthdaysTab();
 
@@ -149,7 +149,7 @@ async function handleOpenAndStart() {
     }
 
     await logProgress('Tab loaded, starting extraction...');
-    await chrome.tabs.sendMessage(tabId, { type: 'START' });
+    await chrome.tabs.sendMessage(tabId, { type: 'START', format });
   } catch (e) {
     await logProgress('ERROR: ' + e.message);
     chrome.runtime.sendMessage({ type: 'ERROR', text: e.message }).catch(() => {});
@@ -167,7 +167,14 @@ chrome.runtime.onMessage.addListener((msg) => {
       filename: msg.filename || 'fb-birthdays.csv',
       saveAs: false,
     });
+  } else if (msg.type === 'DOWNLOAD_ICS') {
+    const url = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(msg.ics);
+    chrome.downloads.download({
+      url,
+      filename: msg.filename || 'fb-birthdays.ics',
+      saveAs: false,
+    });
   } else if (msg.type === 'OPEN_AND_START') {
-    handleOpenAndStart();
+    handleOpenAndStart(msg.format);
   }
 });
