@@ -1,7 +1,59 @@
 const extractBtn = document.getElementById('extractBtn');
 const stopBtn = document.getElementById('stopBtn');
+const settingsBtn = document.getElementById('settingsBtn');
+const settingsPanel = document.getElementById('settingsPanel');
 const statusEl = document.getElementById('status');
 const logEl = document.getElementById('log');
+
+const repeatForeverEl = document.getElementById('repeatForever');
+const unknownYearRadios = document.getElementsByName('unknownYearMode');
+const customYearValueEl = document.getElementById('customYearValue');
+const scrollWaitSecondsEl = document.getElementById('scrollWaitSeconds');
+
+const DEFAULT_SETTINGS = {
+  repeatForever: false,
+  unknownYearMode: 'next_birthday',
+  unknownYearCustomValue: 1900,
+  scrollWaitSeconds: 10,
+};
+
+function getUnknownYearMode() {
+  for (const r of unknownYearRadios) if (r.checked) return r.value;
+  return DEFAULT_SETTINGS.unknownYearMode;
+}
+
+function setUnknownYearMode(mode) {
+  for (const r of unknownYearRadios) r.checked = r.value === mode;
+}
+
+async function loadSettings() {
+  const { fbbday_settings } = await chrome.storage.local.get('fbbday_settings');
+  const settings = { ...DEFAULT_SETTINGS, ...(fbbday_settings || {}) };
+  repeatForeverEl.checked = settings.repeatForever;
+  setUnknownYearMode(settings.unknownYearMode);
+  customYearValueEl.value = settings.unknownYearCustomValue;
+  scrollWaitSecondsEl.value = settings.scrollWaitSeconds;
+}
+
+async function saveSettings() {
+  const settings = {
+    repeatForever: repeatForeverEl.checked,
+    unknownYearMode: getUnknownYearMode(),
+    unknownYearCustomValue: Number(customYearValueEl.value) || DEFAULT_SETTINGS.unknownYearCustomValue,
+    scrollWaitSeconds: Number(scrollWaitSecondsEl.value) || DEFAULT_SETTINGS.scrollWaitSeconds,
+  };
+  await chrome.storage.local.set({ fbbday_settings: settings });
+}
+
+settingsBtn.addEventListener('click', () => {
+  settingsPanel.classList.toggle('hidden');
+});
+
+for (const el of [repeatForeverEl, customYearValueEl, scrollWaitSecondsEl, ...unknownYearRadios]) {
+  el.addEventListener('change', saveSettings);
+}
+
+loadSettings();
 
 function appendLog(line) {
   logEl.textContent += line + '\n';
