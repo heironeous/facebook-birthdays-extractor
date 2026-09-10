@@ -1,7 +1,14 @@
+html, body {
+  height: 100%;
+}
+
 body {
-  width: 320px;
+  min-width: 320px;
   font-family: system-ui, sans-serif;
   padding: 10px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
 }
 
 h1 {
@@ -33,7 +40,8 @@ button:disabled {
 }
 
 #log {
-  height: 160px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   background: #111;
   color: #0f0;
@@ -41,4 +49,34 @@ button:disabled {
   padding: 6px;
   margin: 0;
   white-space: pre-wrap;
+  box-sizing: border-box;
+}
+
+#settingsBtn {
+  flex: 0 0 auto;
+}
+
+.settings-panel {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.settings-panel.hidden {
+  display: none;
+}
+
+.settings-row {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.settings-row.indent {
+  margin-left: 16px;
+}
+
+.settings-row input[type="number"] {
+  width: 60px;
 }

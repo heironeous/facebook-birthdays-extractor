@@ -27,7 +27,7 @@ const BIRTHDAYS_URL = 'https://www.facebook.com/events/birthdays/';
 const BIRTHDAYS_URL_MATCH = 'facebook.com/events/birthdays';
 const TAB_LOAD_TIMEOUT_MS = 30000;
 const PROGRESS_WINDOW_WIDTH = 380;
-const PROGRESS_WINDOW_HEIGHT = 560;
+const PROGRESS_WINDOW_HEIGHT = 392;
 
 let progressWindowId = null;
 

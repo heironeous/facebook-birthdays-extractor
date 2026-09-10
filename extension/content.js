@@ -23,21 +23,34 @@
 //   {"node":{"__typename":"User","id":"709791869",...,"name":"Nil Kolsal",
 //   ...,"birthdate":{"day":17,"month":9,"year":null},...}}
 //
-// Scroll loop: extract, scroll to bottom, wait a fixed 10s for the next
-// batch to load (both the network capture and the <script> rescan pick
-// it up), repeat, until page height is stable for 2 rounds running.
+// Scroll loop: extract, scroll to bottom, wait (user-configurable via
+// fbbday_settings.scrollWaitSeconds, default 10s) for the next batch to
+// load (both the network capture and the <script> rescan pick it up),
+// repeat, until page height is stable for 2 rounds running.
 const ENTRY_RE =
   /"__typename":"User","id":"(\d+)"[\s\S]{0,400}?"name":"((?:\\.|[^"\\])*)"[\s\S]{0,2000}?"birthdate":\{"day":(\d+),"month":(\d+),"year":(null|\d+)\}/g;
 
-const SCROLL_DELAY_MS = 10000;
 const SCROLL_STABLE_ROUNDS_REQUIRED = 2;
 const MAX_SCROLL_ROUNDS = 120;
+
+const DEFAULT_SETTINGS = {
+  repeatForever: false,
+  unknownYearMode: 'next_birthday',
+  unknownYearCustomValue: 1900,
+  scrollWaitSeconds: 10,
+};
+
+async function loadSettings() {
+  const { fbbday_settings } = await chrome.storage.local.get('fbbday_settings');
+  return { ...DEFAULT_SETTINGS, ...(fbbday_settings || {}) };
+}
 
 // Module-scope so the postMessage listener (registered immediately,
 // below) and the scroll loop (started later, on START) both write into
 // the same Map regardless of which one sees a given friend first.
 let collected = new Map();
 let running = false;
+let settings = DEFAULT_SETTINGS;
 
 window.addEventListener('message', (event) => {
   if (event.source !== window) return;
@@ -128,8 +141,8 @@ async function scrollUntilComplete() {
     await log(`Round ${round}: +${added} new from page data (total ${collected.size} unique birthdays).`);
 
     window.scrollTo(0, document.body.scrollHeight);
-    await log(`  waiting ${SCROLL_DELAY_MS / 1000}s for the page to load more...`);
-    const ok = await sleepInterruptible(SCROLL_DELAY_MS);
+    await log(`  waiting ${settings.scrollWaitSeconds}s for the page to load more...`);
+    const ok = await sleepInterruptible(settings.scrollWaitSeconds * 1000);
     if (!ok) return { stopped: true };
 
     const height = document.body.scrollHeight;
@@ -155,35 +168,50 @@ async function scrollUntilComplete() {
 // Google Calendar's CSV importer uses the legacy Outlook column layout:
 // Subject,Start Date,Start Time,End Date,End Time,All Day Event,
 // Description,Location,Private. When Facebook exposes the birth year,
-// that's used directly as the real birth date; otherwise (the common
-// case — Facebook hides it by default) each row falls back to the *next
-// upcoming occurrence* of that month/day (today or later), since that's
-// the date Google Calendar needs for a one-time all-day import. Note:
-// this format has no recurrence field, so imported events do NOT
-// auto-repeat next year; re-run the export annually, or set "Repeat
-// yearly" by hand on each event after import.
+// that's used directly as the real birth date; otherwise the fallback is
+// user-configurable (fbbday_settings.unknownYearMode): next upcoming
+// occurrence of that month/day (default), always next calendar year, or a
+// fixed custom year. This format has no recurrence field, so imported
+// events do NOT auto-repeat next year on their own; if
+// fbbday_settings.repeatForever is on, each row's Description carries a
+// reminder to set "Repeat yearly" by hand after import.
 function pad2(n) {
   return String(n).padStart(2, '0');
 }
 
 function birthdayMMDDYYYY(month, day, year) {
   if (year) return `${pad2(month)}/${pad2(day)}/${year}`;
+
   const now = new Date();
+  if (settings.unknownYearMode === 'next_year') {
+    return `${pad2(month)}/${pad2(day)}/${now.getFullYear() + 1}`;
+  }
+  if (settings.unknownYearMode === 'custom') {
+    return `${pad2(month)}/${pad2(day)}/${settings.unknownYearCustomValue}`;
+  }
+
+  // 'next_birthday' (default): next upcoming occurrence, today or later.
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   let y = now.getFullYear();
   if (new Date(y, month - 1, day) < today) y++;
   return `${pad2(month)}/${pad2(day)}/${y}`;
 }
 
+// CSV format in use has no recurrence column, so "repeat forever" can't be
+// a real RRULE — when enabled, note it in the Description so the user
+// knows to set yearly recurrence by hand after import.
+const REPEAT_FOREVER_NOTE = 'Repeats annually — set "Repeat yearly" after import.';
+
 function toCsv(rows) {
   const escape = (v) => `"${String(v).replace(/"/g, '""')}"`;
   const header = 'Subject,Start Date,Start Time,End Date,End Time,All Day Event,Description,Location,Private';
   const lines = [header];
+  const description = settings.repeatForever ? REPEAT_FOREVER_NOTE : '';
   for (const { name, month, day, year } of rows) {
     const date = birthdayMMDDYYYY(month, day, year);
     const subject = `${name}'s Birthday`;
     lines.push(
-      [escape(subject), date, '', date, '', 'True', '', '', 'False'].join(',')
+      [escape(subject), date, '', date, '', 'True', escape(description), '', 'False'].join(',')
     );
   }
   return lines.join('\r\n');
@@ -193,6 +221,7 @@ async function runExtraction() {
   if (running) return;
   running = true;
   collected = new Map();
+  settings = await loadSettings();
   try {
     await log('Extracting birthdays from GraphQL responses while scrolling...');
     const { stopped } = await scrollUntilComplete();

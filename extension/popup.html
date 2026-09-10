@@ -2,6 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8" />
+  <title>FB Birthday Extractor</title>
   <link rel="stylesheet" href="popup.css" />
 </head>
 <body>
@@ -9,7 +10,36 @@
   <div class="row">
     <button id="extractBtn">Extract as CSV</button>
     <button id="stopBtn" disabled>Stop</button>
+    <button id="settingsBtn" title="Settings">&#9881;</button>
   </div>
+
+  <div id="settingsPanel" class="settings-panel hidden">
+    <label class="settings-row">
+      <input type="checkbox" id="repeatForever" />
+      Repeat forever in exported CSV
+    </label>
+
+    <div class="settings-row">Unknown birth year, fill with:</div>
+    <label class="settings-row indent">
+      <input type="radio" name="unknownYearMode" value="next_birthday" id="modeNextBirthday" />
+      Next available birthday
+    </label>
+    <label class="settings-row indent">
+      <input type="radio" name="unknownYearMode" value="next_year" id="modeNextYear" />
+      Next year
+    </label>
+    <label class="settings-row indent">
+      <input type="radio" name="unknownYearMode" value="custom" id="modeCustom" />
+      Custom year:
+      <input type="number" id="customYearValue" step="1" />
+    </label>
+
+    <label class="settings-row">
+      Wait between scrolls (seconds):
+      <input type="number" id="scrollWaitSeconds" min="1" step="1" />
+    </label>
+  </div>
+
   <div id="status">Idle.</div>
   <pre id="log"></pre>
   <script src="popup.js"></script>
